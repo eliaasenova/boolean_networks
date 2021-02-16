@@ -1,18 +1,34 @@
 from typing import DefaultDict
+from itertools import combinations
+import matplotlib.pyplot as plt
 import numpy as np
 import math
-import itertools
+import statistics
 
-def generateTrainTestData(experiments, trainDataLength):
+def generateTrainData(experiments, trainDataLength):
+    trainDataCombinations = np.array(list(combinations(experiments.T, trainDataLength)))
+
+    return trainDataCombinations
+
+def generateTestData(experiments, trainData):
     transposedExperiments = experiments.T
-
-    trainDataCombinations = np.array(list(itertools.combinations(transposedExperiments, trainDataLength)))
+    testData = np.copy(transposedExperiments)
     
-    testDataLength = len(transposedExperiments) - trainDataLength
-    reversedExperiments = np.flip(transposedExperiments, 0)
-    testDataCombinations = np.array(list(itertools.combinations(reversedExperiments, testDataLength)))
+    # for experiment in transposedExperiments:
+    #     for i in range(0, len(trainData)):
+    #         if (trainData[i] != experiment).any():
+    #             testData.append(experiment)
+    #         else:
+    #             np.delete(trainData, i)
+    #             pass
 
-    return (trainDataCombinations, testDataCombinations)
+    for state in trainData:
+        for j in range(0, len(testData)):
+            if (state == testData[j]).all():
+                testData = np.delete(testData, j, 0)
+                break
+    
+    return testData
 
 def decimal_to_binary(x, n):
     binary = bin(x).replace("0b", "")
@@ -59,30 +75,29 @@ def getOptimalClassificator(classificator, testData):
     countOnes = DefaultDict(int)
 
     for state in testData:
-        str = np.array2string(state[:-1], separator='')
-        decimalState = binary_to_decimal(str[1:-1])
+        strState = np.array2string(state[:-1], separator='')
+        decimalState = binary_to_decimal(strState[1:-1])
 
         # this should be fixed in the case when we have two options with -1 and we have to make combinations when we combine them together
         if classificator[decimalState, -1] == -1:
             if state[-1] == 0:
                 # testClassificator[decimalState, 0] = testClassificator[decimalState, 0] + 1
-                countZeros[str[1:-1]] += 1
+                countZeros[strState[1:-1]] += 1
             elif state[-1] == 1:
-                countOnes[str[1:-1]] += 1
+                countOnes[strState[1:-1]] += 1
             
     if countZeros or countOnes:
         for state in classificator:
-            str = np.array2string(state[:-1], separator='')
+            strState = np.array2string(state[:-1], separator='')
 
-            if countZeros[str[1:-1]] >= countOnes[str[1:-1]] and countZeros[str[1:-1]] != 0:
+            if countZeros[strState[1:-1]] >= countOnes[strState[1:-1]] and countZeros[strState[1:-1]] != 0:
                 state[-1] = 0
-            elif countZeros[str[1:-1]] < countOnes[str[1:-1]]:
+            elif countZeros[strState[1:-1]] < countOnes[strState[1:-1]]:
                 state[-1] = 1
 
     return classificator
 
 def calculateOptClassificatorError(classificator, testData):
-    predictorStates, _ = classificator.shape
     errors = 0
     for state in testData:
         str = np.array2string(state[:-1], separator='')
@@ -91,18 +106,18 @@ def calculateOptClassificatorError(classificator, testData):
         if classificator[decimalState, -1] != state[-1]:
             errors = errors + 1
 
-    return errors/predictorStates
+    numberOfTestData, _ = testData.shape
+    return round(errors/numberOfTestData, 3)
 
 def trainConstantClassificator(trainData, testData):
-    constantClassificator = 0
     countConstants = np.zeros(2)
     for state in trainData:
         countConstants[state[-1]] = countConstants[state[-1]] + 1
 
-    if countConstants[0] != countConstants[1]:
-        print(countConstants)
-        constantClassificator = countConstants.index(max(countConstants)) # fails when more than one combination is runned
-    else:
+    constantClassificator = 0
+    if countConstants[1] > countConstants[0]:
+        constantClassificator = 1
+    elif countConstants[0] == countConstants[1]:
         constantClassificator = chooseOptConstantClassificator(testData)    
 
     return constantClassificator
@@ -121,7 +136,8 @@ def calcConstantClassificatorError(constantClassificator, testData):
         if state[-1] != constantClassificator:
             errors = errors + 1
 
-    return errors/4
+    numberOfTestData, _ = testData.shape
+    return round(errors/numberOfTestData, 3)
 
 def calculateCoD(optConstantClassificatorError, optClassificatorError):
     return (optConstantClassificatorError - optClassificatorError)/optConstantClassificatorError
@@ -130,45 +146,44 @@ def main():
     genes = 3
     predictors = 2
     predictorStates = int(math.pow(2, predictors))
-    # numberOfExperiments = 8
 
     experiments = np.array([[1, 1, 0, 1, 1, 1, 1, 1],
                             [0, 1, 1, 1, 0, 1, 0, 1],
                             [0, 1, 0, 1, 0, 1, 0, 0]])
-    
-    trainDataCombinations, testDataCombinations = generateTrainTestData(experiments, 4)
-    print(len(testDataCombinations))
-    print(len(trainDataCombinations))
+    meanCoD = np.zeros(6)
+    for i in range(1, 6):
+        trainDataCombinations = generateTrainData(experiments, i)
 
-    for i in range(0, len(testDataCombinations)):
-        # trainData = experiments[:, 0:4].T
-        # testData = experiments[:, 4:8].T
+        allCoD = np.zeros(len(trainDataCombinations))
+        for j in range(0, len(trainDataCombinations)):
 
-        trainData = trainDataCombinations[i]
-        testData = testDataCombinations[i]
-        print(trainData)
-        print(testData)
+            trainData = trainDataCombinations[j]
+            testData = generateTestData(experiments, trainDataCombinations[j])
 
-        # generate all possible states of predictors
-        commonClassificator = populatePredictorStates(predictorStates, predictors)
+            # generate all possible states of predictors
+            commonClassificator = populatePredictorStates(predictorStates, predictors)
+            
+            # count different outputs for the possible states and get the most common one for the classificator
+            commonClassificator = trainClassificatorWithData(commonClassificator, trainData)
+
+            # build all possible classificators depending on the results of the common classificator
+            optimalClassificator = getOptimalClassificator(commonClassificator, testData)
+
+            # after the classificators are build, test them on the test data
+            optClassificatorError = calculateOptClassificatorError(optimalClassificator, testData)
+
+            #get optimal constant classificator
+            optConstantClassificator = trainConstantClassificator(trainData, testData)
+
+            #calculate optimal constant classificator error
+            optConstantClassificatorError = calcConstantClassificatorError(optConstantClassificator, testData)
+            cod = calculateCoD(optConstantClassificatorError, optClassificatorError)
+            allCoD[j] = round(cod, 3)
         
-        # count different outputs for the possible states and get the most common one for the classificator
-        commonClassificator = trainClassificatorWithData(commonClassificator, trainData)
+        meanCoD[i] = statistics.mean(allCoD)
 
-        # build all possible classificators depending on the results of the common classificator
-        optimalClassificator = getOptimalClassificator(commonClassificator, testData)
-
-        # after the classificators are build, test them on the test data
-        optClassificatorError = calculateOptClassificatorError(optimalClassificator, testData)
-
-        #get optimal constant classificator
-        optConstantClassificator = trainConstantClassificator(trainData, testData)
-
-        #calculate optimal constant classificator error
-        optConstantClassificatorError = calcConstantClassificatorError(optConstantClassificator, testData)
-
-        cod = calculateCoD(optConstantClassificatorError, optClassificatorError)
-        print(cod)
+    plt.plot(meanCoD)
+    plt.show()
 
 if __name__ == "__main__":
     main()
