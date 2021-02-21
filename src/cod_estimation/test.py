@@ -13,14 +13,6 @@ def generateTrainData(experiments, trainDataLength):
 def generateTestData(experiments, trainData):
     transposedExperiments = experiments.T
     testData = np.copy(transposedExperiments)
-    
-    # for experiment in transposedExperiments:
-    #     for i in range(0, len(trainData)):
-    #         if (trainData[i] != experiment).any():
-    #             testData.append(experiment)
-    #         else:
-    #             np.delete(trainData, i)
-    #             pass
 
     for state in trainData:
         for j in range(0, len(testData)):
@@ -140,7 +132,12 @@ def calcConstantClassificatorError(constantClassificator, testData):
     return round(errors/numberOfTestData, 3)
 
 def calculateCoD(optConstantClassificatorError, optClassificatorError):
-    return (optConstantClassificatorError - optClassificatorError)/optConstantClassificatorError
+    if optConstantClassificatorError != 0:
+        cod = (optConstantClassificatorError - optClassificatorError)/optConstantClassificatorError
+    else:
+        cod = 1
+
+    return cod
 
 def main():
     genes = 3
@@ -150,9 +147,11 @@ def main():
     experiments = np.array([[1, 1, 0, 1, 1, 1, 1, 1],
                             [0, 1, 1, 1, 0, 1, 0, 1],
                             [0, 1, 0, 1, 0, 1, 0, 0]])
-    meanCoD = np.zeros(6)
-    for i in range(1, 6):
+    meanCoD = np.zeros(8)
+    sumOfCombinations = 0
+    for i in range(1, 8):
         trainDataCombinations = generateTrainData(experiments, i)
+        sumOfCombinations += len(trainDataCombinations)
 
         allCoD = np.zeros(len(trainDataCombinations))
         for j in range(0, len(trainDataCombinations)):
@@ -182,6 +181,7 @@ def main():
         
         meanCoD[i] = statistics.mean(allCoD)
 
+    print(sumOfCombinations)
     plt.plot(meanCoD)
     plt.show()
 
