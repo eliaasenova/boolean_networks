@@ -4,7 +4,7 @@ import collections
 def generate_SSD_with_uniform_distribution(initialProbabilities, transitionMatrix):
     steadyStateProbabilities = np.zeros([len(initialProbabilities),1])
     countIterations = 0
-    # transitionMatrix = transitionMatrix.T
+    transitionMatrix = transitionMatrix.T
 
     while collections.Counter(initialProbabilities.T[0]) != collections.Counter(steadyStateProbabilities.T[0]):
         steadyStateProbabilities = initialProbabilities
