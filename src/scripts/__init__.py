@@ -1,0 +1,1 @@
+from .calculate_cod import decimal_to_binary, binary_to_decimal
